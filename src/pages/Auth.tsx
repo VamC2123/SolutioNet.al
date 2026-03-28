@@ -32,26 +32,45 @@ export default function Auth() {
     return null;
   }
 
+  const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+  /** Supabase returns 429 when Auth rate limits are hit (signup/login/email sends). */
+  function formatAuthError(err: { message?: string; status?: number }, context: "signup" | "login"): string {
+    const msg = (err.message || "").toLowerCase();
+    if (err.status === 429 || msg.includes("rate") || msg.includes("too many")) {
+      return context === "signup"
+        ? "Signup limit reached (Supabase rate limit). Wait 15–60 minutes, or create users in Dashboard → Authentication → Users instead of signing up repeatedly."
+        : "Too many login attempts. Wait a few minutes and try again.";
+    }
+    return err.message || (context === "signup" ? "Signup failed" : "Login failed");
+  }
+
   const handleLogin = async () => {
-    if (!loginEmail || !loginPassword) {
+    if (loginLoading) return;
+    const email = normalizeEmail(loginEmail);
+    if (!email || !loginPassword) {
       toast.error("Please fill in all fields");
       return;
     }
 
     setLoginLoading(true);
-    const { error } = await signIn(loginEmail, loginPassword);
+    const { error } = await signIn(email, loginPassword);
     setLoginLoading(false);
 
     if (error) {
-      toast.error(error.message || "Login failed");
+      toast.error(formatAuthError(error as { message?: string; status?: number }, "login"));
     }
   };
 
   const handleSignup = async () => {
-    if (!signupEmail || !signupPassword || !signupFullName) {
+    if (signupLoading) return;
+    const email = normalizeEmail(signupEmail);
+    if (!email || !signupPassword || !signupFullName) {
       toast.error("Please fill in all required fields");
       return;
     }
+
+    // Do not validate email format here — Supabase Auth does that. A strict regex caused false "invalid email" errors.
 
     if (signupPassword.length < 6) {
       toast.error("Password must be at least 6 characters");
@@ -59,47 +78,48 @@ export default function Auth() {
     }
 
     setSignupLoading(true);
-    
-    // Sign up the user
+
+    const userMeta: Record<string, string> = {
+      full_name: signupFullName.trim(),
+    };
+    const bio = signupBio.trim();
+    if (bio) userMeta.bio = bio;
+    const gh = signupGithub.trim();
+    if (gh) userMeta.github_url = gh;
+    const li = signupLinkedin.trim();
+    if (li) userMeta.linkedin_url = li;
+    const tw = signupTwitter.trim();
+    if (tw) userMeta.twitter_url = tw;
+
     const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: signupEmail,
+      email,
       password: signupPassword,
       options: {
         emailRedirectTo: `${window.location.origin}/`,
-        data: {
-          full_name: signupFullName,
-        }
-      }
+        data: userMeta,
+      },
     });
 
+    setSignupLoading(false);
+
     if (authError) {
-      setSignupLoading(false);
-      toast.error(authError.message || "Signup failed");
+      toast.error(formatAuthError(authError as { message?: string; status?: number }, "signup"));
       return;
     }
 
-    // Update profile with additional details
-    if (authData.user) {
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({
-          bio: signupBio || null,
-          github_url: signupGithub || null,
-          linkedin_url: signupLinkedin || null,
-          twitter_url: signupTwitter || null,
-        })
-        .eq("id", authData.user.id);
+    setSelected("login");
+    setLoginEmail(email);
+    setLoginPassword(signupPassword);
 
-      if (profileError) {
-        console.error("Error updating profile:", profileError);
-      }
+    if (authData.session) {
+      toast.success("Account created! You are logged in.");
+      navigate("/");
+      return;
     }
 
-    setSignupLoading(false);
-    setSelected("login");
-    setLoginEmail(signupEmail);
-    setLoginPassword(signupPassword);
-    toast.success("Account created! Please log in.");
+    toast.success(
+      "Account created. If email confirmation is enabled, check your inbox — then log in here."
+    );
   };
 
   return (

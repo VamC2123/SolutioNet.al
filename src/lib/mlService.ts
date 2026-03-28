@@ -1,56 +1,114 @@
-import { supabase } from "@/integrations/supabase/client";
+// ML: OpenAI from the browser via VITE_OPENAI_API_KEY (set in Vercel / .env).
+// The key is bundled into the client — fine for small/private deploys; use a server proxy for production at scale.
 
-function mlEnabled(): boolean {
-  return String(import.meta.env.VITE_ENABLE_ML_FUNCTION || "").toLowerCase() === "true";
+function getOpenAIKey(): string {
+  const raw = import.meta.env.VITE_OPENAI_API_KEY;
+  return (typeof raw === "string" ? raw : "").trim();
 }
 
-export const isMockMode = () => !mlEnabled();
+const OPENAI_API_URL = "https://api.openai.com/v1";
 
-async function callMlFunction<T>(payload: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke("ml-proxy", {
-    body: payload,
+export const isMockMode = () => !getOpenAIKey();
+
+async function openAiChatCompletion(params: {
+  system: string;
+  user: string;
+  max_tokens?: number;
+  temperature?: number;
+}): Promise<string> {
+  const apiKey = getOpenAIKey();
+  if (!apiKey) {
+    throw new Error("OpenAI API key missing. Set VITE_OPENAI_API_KEY in Vercel (or .env) and redeploy.");
+  }
+
+  const { system, user, max_tokens = 800, temperature = 0.5 } = params;
+
+  const response = await fetch(`${OPENAI_API_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      max_tokens,
+      temperature,
+    }),
   });
-  if (error) throw error;
-  return data as T;
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`OpenAI API error: ${response.status} ${response.statusText}${text ? ` - ${text}` : ""}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content?.trim?.() || "";
 }
 
-// Generate text embeddings using text-embedding-3-small
 export async function generateEmbedding(text: string): Promise<number[]> {
-  if (!mlEnabled()) {
+  if (!getOpenAIKey()) {
     return Array.from({ length: 1536 }, () => Math.random() * 2 - 1);
   }
 
   try {
-    const result = await callMlFunction<{ embedding: number[] }>({
-      action: "embedding",
-      input: text,
+    const key = getOpenAIKey();
+    const response = await fetch(`${OPENAI_API_URL}/embeddings`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: text,
+      }),
     });
-    return Array.isArray(result?.embedding) ? result.embedding : [];
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.data[0].embedding;
   } catch (error) {
     console.error("Error generating embedding:", error);
     return Array.from({ length: 1536 }, () => Math.random() * 2 - 1);
   }
 }
 
-// Generate embeddings for multiple texts in one API call (batch)
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  if (!mlEnabled()) {
+  if (!getOpenAIKey()) {
     return texts.map(() => Array.from({ length: 1536 }, () => Math.random() * 2 - 1));
   }
   try {
-    const result = await callMlFunction<{ embeddings: number[][] }>({
-      action: "embeddings",
-      input: texts,
+    const key = getOpenAIKey();
+    const response = await fetch(`${OPENAI_API_URL}/embeddings`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: texts,
+      }),
     });
-    return Array.isArray(result?.embeddings) ? result.embeddings : [];
+    if (!response.ok) throw new Error(`OpenAI API error: ${response.statusText}`);
+    const data = await response.json();
+    return (data.data as any[])
+      .sort((a: any, b: any) => (a.index ?? 0) - (b.index ?? 0))
+      .map((d: any) => d.embedding);
   } catch (error) {
     console.error("Error generating embeddings:", error);
     return texts.map(() => Array.from({ length: 1536 }, () => Math.random() * 2 - 1));
   }
 }
 
-// Build a single text representation for a problem (for embedding)
 function problemToText(p: { title?: string; domain?: string; tags?: string[] }): string {
   const title = (p.title ?? "").trim();
   const domain = (p.domain ?? "").trim();
@@ -58,7 +116,6 @@ function problemToText(p: { title?: string; domain?: string; tags?: string[] }):
   return [title, domain, tags].filter(Boolean).join(" ");
 }
 
-// Rank candidate problems by similarity to current (using embeddings if API key set, else domain/tag overlap)
 export async function getRelatedProblemsRanked(
   current: { id: string; title?: string; domain?: string; tags?: string[] },
   candidates: Array<{ id: string; pid: string; title?: string; domain?: string; tags?: string[] }>,
@@ -68,11 +125,12 @@ export async function getRelatedProblemsRanked(
   const currentDomain = (current.domain ?? "").trim().toLowerCase();
   const currentTags = new Set((current.tags ?? []).map((t) => String(t).trim().toLowerCase()).filter(Boolean));
 
-  if (mlEnabled()) {
+  if (getOpenAIKey()) {
     try {
       const allTexts = [problemToText(current), ...candidates.map((c) => problemToText(c))];
       const embeddings = await generateEmbeddings(allTexts);
-      if (embeddings.length !== allTexts.length) return candidates.slice(0, topN).map((c) => ({ id: c.id, pid: c.pid, title: c.title ?? "", domain: c.domain ?? "" }));
+      if (embeddings.length !== allTexts.length)
+        return candidates.slice(0, topN).map((c) => ({ id: c.id, pid: c.pid, title: c.title ?? "", domain: c.domain ?? "" }));
       const currentEmb = embeddings[0];
       const withScore = candidates.map((c, i) => ({
         ...c,
@@ -97,7 +155,6 @@ export async function getRelatedProblemsRanked(
   return withScore.slice(0, topN).map((c) => ({ id: c.id, pid: c.pid, title: c.title ?? "", domain: c.domain ?? "" }));
 }
 
-// Calculate cosine similarity between two embeddings
 export function cosineSimilarity(embedding1: number[], embedding2: number[]): number {
   if (embedding1.length !== embedding2.length) {
     return 0;
@@ -117,45 +174,35 @@ export function cosineSimilarity(embedding1: number[], embedding2: number[]): nu
   return denominator === 0 ? 0 : dotProduct / denominator;
 }
 
-// Summarize text using GPT-4o-mini
 export async function summarizeText(text: string, maxLength: number = 200): Promise<string> {
-  if (!mlEnabled()) {
-    // Return mock summary
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    const summary = sentences.slice(0, 3).join('. ').trim();
-    return summary.length > maxLength 
-      ? summary.substring(0, maxLength) + '...' 
-      : summary + '.';
+  if (!getOpenAIKey()) {
+    const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 0);
+    const summary = sentences.slice(0, 3).join(". ").trim();
+    return summary.length > maxLength ? summary.substring(0, maxLength) + "..." : summary + ".";
   }
 
   try {
-    const result = await callMlFunction<{ text: string }>({
-      action: "chat",
+    const summary = await openAiChatCompletion({
       system: "You are a helpful assistant that summarizes user-provided text clearly and accurately.",
       user: text,
       max_tokens: Math.max(150, Math.floor(maxLength * 1.5)),
       temperature: 0.4,
     });
-    return result?.text || "";
+    return summary;
   } catch (error) {
     console.error("Error summarizing text:", error);
-    // Fallback to mock summary
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    const summary = sentences.slice(0, 3).join('. ').trim();
-    return summary.length > maxLength 
-      ? summary.substring(0, maxLength) + '...' 
-      : summary + '.';
+    const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 0);
+    const summary = sentences.slice(0, 3).join(". ").trim();
+    return summary.length > maxLength ? summary.substring(0, maxLength) + "..." : summary + ".";
   }
 }
 
-// Summarize multiple solution abstracts
 export async function summarizeSolutions(abstracts: string[]): Promise<string> {
   if (abstracts.length === 0) {
-    return 'No solutions to summarize.';
+    return "No solutions to summarize.";
   }
 
-  if (!mlEnabled()) {
-    // Simple mock: two short paragraphs built from the first few abstracts
+  if (!getOpenAIKey()) {
     const normalized = abstracts
       .map((a) => a.replace(/\s+/g, " ").trim())
       .filter(Boolean);
@@ -168,7 +215,7 @@ export async function summarizeSolutions(abstracts: string[]): Promise<string> {
 
   const combinedText = abstracts
     .map((abstract, index) => `Solution ${index + 1}: ${abstract}`)
-    .join('\n\n');
+    .join("\n\n");
 
   const system = [
     "You summarize multiple proposed solutions to a research problem.",
@@ -192,17 +239,9 @@ export async function summarizeSolutions(abstracts: string[]): Promise<string> {
   ].join("\n");
 
   try {
-    const result = await callMlFunction<{ text: string }>({
-      action: "chat",
-      system,
-      user,
-      max_tokens: 800,
-      temperature: 0.3,
-    });
-    return result?.text || "";
+    return await openAiChatCompletion({ system, user, max_tokens: 800, temperature: 0.3 });
   } catch (error) {
     console.error("Error summarizing solutions:", error);
-    // fallback: at least surface the abstracts in a structured way
     const lines: string[] = [];
     lines.push("Most of the Users say: ");
     abstracts.forEach((a, idx) => {
@@ -212,4 +251,3 @@ export async function summarizeSolutions(abstracts: string[]): Promise<string> {
     return lines.join("\n");
   }
 }
-

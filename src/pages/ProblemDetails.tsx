@@ -634,7 +634,7 @@ const ProblemDetails = () => {
                       <div className="space-y-2">
                         {isMockMode() && (
                           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
-                            Demo mode: deploy the ml-proxy Edge Function and set VITE_ENABLE_ML_FUNCTION=true.
+                            Demo mode: set VITE_OPENAI_API_KEY in Vercel for real AI summaries.
                           </div>
                         )}
                         <Card className="bg-primary/5 border border-primary/20">
