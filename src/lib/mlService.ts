@@ -1,84 +1,33 @@
-// ML Service for OpenAI API integration
-// Supports GPT-4o-mini and text-embedding-3-small
+import { supabase } from "@/integrations/supabase/client";
 
-function getOpenAIKey(): string {
-  const raw = import.meta.env.VITE_OPENAI_API_KEY;
-  return (typeof raw === "string" ? raw : "").trim();
+function mlEnabled(): boolean {
+  return String(import.meta.env.VITE_ENABLE_ML_FUNCTION || "").toLowerCase() === "true";
 }
 
-const OPENAI_API_URL = "https://api.openai.com/v1";
+export const isMockMode = () => !mlEnabled();
 
-export const isMockMode = () => !getOpenAIKey();
-
-async function openAiChatCompletion(params: {
-  system: string;
-  user: string;
-  max_tokens?: number;
-  temperature?: number;
-}): Promise<string> {
-  const apiKey = getOpenAIKey();
-  if (!apiKey) {
-    throw new Error("OpenAI API key is missing. Set VITE_OPENAI_API_KEY in .env and restart the dev server or rebuild.");
-  }
-
-  const { system, user, max_tokens = 1200, temperature = 0.5 } = params;
-
-  const response = await fetch(`${OPENAI_API_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      max_tokens,
-      temperature,
-    }),
+async function callMlFunction<T>(payload: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("ml-proxy", {
+    body: payload,
   });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`OpenAI API error: ${response.status} ${response.statusText}${text ? ` - ${text}` : ""}`);
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content?.trim?.() || "";
+  if (error) throw error;
+  return data as T;
 }
 
 // Generate text embeddings using text-embedding-3-small
 export async function generateEmbedding(text: string): Promise<number[]> {
-  if (!getOpenAIKey()) {
-    // Return mock   embedding (1536 dimensions for text-embedding-3-small)
+  if (!mlEnabled()) {
     return Array.from({ length: 1536 }, () => Math.random() * 2 - 1);
   }
 
   try {
-    const key = getOpenAIKey();
-    const response = await fetch(`${OPENAI_API_URL}/embeddings`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: text,
-      }),
+    const result = await callMlFunction<{ embedding: number[] }>({
+      action: "embedding",
+      input: text,
     });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.data[0].embedding;
+    return Array.isArray(result?.embedding) ? result.embedding : [];
   } catch (error) {
-    console.error('Error generating embedding:', error);
-    // Fallback to mock embedding on error
+    console.error("Error generating embedding:", error);
     return Array.from({ length: 1536 }, () => Math.random() * 2 - 1);
   }
 }
@@ -86,25 +35,15 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 // Generate embeddings for multiple texts in one API call (batch)
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  if (!getOpenAIKey()) {
+  if (!mlEnabled()) {
     return texts.map(() => Array.from({ length: 1536 }, () => Math.random() * 2 - 1));
   }
   try {
-    const key = getOpenAIKey();
-    const response = await fetch(`${OPENAI_API_URL}/embeddings`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model: "text-embedding-3-small",
-        input: texts,
-      }),
+    const result = await callMlFunction<{ embeddings: number[][] }>({
+      action: "embeddings",
+      input: texts,
     });
-    if (!response.ok) throw new Error(`OpenAI API error: ${response.statusText}`);
-    const data = await response.json();
-    return (data.data as any[]).sort((a: any, b: any) => (a.index ?? 0) - (b.index ?? 0)).map((d: any) => d.embedding);
+    return Array.isArray(result?.embeddings) ? result.embeddings : [];
   } catch (error) {
     console.error("Error generating embeddings:", error);
     return texts.map(() => Array.from({ length: 1536 }, () => Math.random() * 2 - 1));
@@ -129,7 +68,7 @@ export async function getRelatedProblemsRanked(
   const currentDomain = (current.domain ?? "").trim().toLowerCase();
   const currentTags = new Set((current.tags ?? []).map((t) => String(t).trim().toLowerCase()).filter(Boolean));
 
-  if (getOpenAIKey()) {
+  if (mlEnabled()) {
     try {
       const allTexts = [problemToText(current), ...candidates.map((c) => problemToText(c))];
       const embeddings = await generateEmbeddings(allTexts);
@@ -180,7 +119,7 @@ export function cosineSimilarity(embedding1: number[], embedding2: number[]): nu
 
 // Summarize text using GPT-4o-mini
 export async function summarizeText(text: string, maxLength: number = 200): Promise<string> {
-  if (!getOpenAIKey()) {
+  if (!mlEnabled()) {
     // Return mock summary
     const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
     const summary = sentences.slice(0, 3).join('. ').trim();
@@ -190,15 +129,16 @@ export async function summarizeText(text: string, maxLength: number = 200): Prom
   }
 
   try {
-    const summary = await openAiChatCompletion({
+    const result = await callMlFunction<{ text: string }>({
+      action: "chat",
       system: "You are a helpful assistant that summarizes user-provided text clearly and accurately.",
       user: text,
       max_tokens: Math.max(150, Math.floor(maxLength * 1.5)),
       temperature: 0.4,
     });
-    return summary;
+    return result?.text || "";
   } catch (error) {
-    console.error('Error summarizing text:', error);
+    console.error("Error summarizing text:", error);
     // Fallback to mock summary
     const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
     const summary = sentences.slice(0, 3).join('. ').trim();
@@ -214,19 +154,16 @@ export async function summarizeSolutions(abstracts: string[]): Promise<string> {
     return 'No solutions to summarize.';
   }
 
-  if (!getOpenAIKey()) {
-    const lines: string[] = [];
-    lines.push("AI Summary");
-    lines.push("");
-    lines.push("Key points:");
-    abstracts.slice(0, 5).forEach((a, idx) => {
-      const short = a.replace(/\s+/g, " ").trim();
-      lines.push(`- Solution ${idx + 1}: ${short.length > 180 ? short.slice(0, 180) + "…" : short}`);
-    });
-    if (abstracts.length > 5) {
-      lines.push(`- +${abstracts.length - 5} more solution(s)`);
-    }
-    return lines.join("\n");
+  if (!mlEnabled()) {
+    // Simple mock: two short paragraphs built from the first few abstracts
+    const normalized = abstracts
+      .map((a) => a.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    const first = normalized.slice(0, 2).join(" ");
+    const second = normalized.slice(2, 4).join(" ");
+    const p1 = first.length > 280 ? first.slice(0, 277) + "..." : first;
+    const p2 = second.length > 280 ? second.slice(0, 277) + "..." : second;
+    return [p1, p2].filter(Boolean).join("\n\n");
   }
 
   const combinedText = abstracts
@@ -235,35 +172,42 @@ export async function summarizeSolutions(abstracts: string[]): Promise<string> {
 
   const system = [
     "You summarize multiple proposed solutions to a research problem.",
-    "Output should be structured plain text. Use headings and bullets; include sub-bullets when helpful.",
+    "Output must be exactly 1–2 short paragraphs of plain text.",
+    "Each paragraph should be at most 4 sentences.",
+    "Do NOT use headings or bullet points.",
     "Produce a synthesized summary: DO NOT list or repeat each abstract verbatim.",
     "You may quote only short phrases when necessary; focus on merging ideas.",
-    "Be as detailed as needed to cover all solutions.",
   ].join("\n");
 
   const user = [
-    "Analyze, summarize and synthesize all the following solution abstracts into an integrated, detailed overview. Provide a detailed analysis of the solutions, including the strengths and weaknesses of each solution, and the potential for combining them into a coherent combined plan.",
-    "Do not output the raw abstracts. Instead, merge them into themes, approaches, and a coherent combined plan.",
+    "Analyze, summarize and synthesize all the following solution abstracts into a concise overview.",
+    "Summarize the main themes and approaches, and briefly mention any notable strengths or differences.",
+    "Keep the answer very short: 1–2 paragraphs, each no more than 4 sentences.",
+    "Do not output the raw abstracts. Instead, merge them into themes and a coherent combined view.",
     "",
     "Required structure:",
-    "AI Summary",
     "Detailed overview",
     " ",
     combinedText,
   ].join("\n");
 
   try {
-    return await openAiChatCompletion({ system, user, max_tokens: 1800, temperature: 0.3 });
+    const result = await callMlFunction<{ text: string }>({
+      action: "chat",
+      system,
+      user,
+      max_tokens: 800,
+      temperature: 0.3,
+    });
+    return result?.text || "";
   } catch (error) {
     console.error("Error summarizing solutions:", error);
     // fallback: at least surface the abstracts in a structured way
     const lines: string[] = [];
-    lines.push("AI Summary");
-    lines.push("");
-    lines.push("Key points:");
+    lines.push("Most of the Users say: ");
     abstracts.forEach((a, idx) => {
       const short = a.replace(/\s+/g, " ").trim();
-      lines.push(`- Solution ${idx + 1}: ${short}`);
+      lines.push(`${idx + 1}. ${short}`);
     });
     return lines.join("\n");
   }

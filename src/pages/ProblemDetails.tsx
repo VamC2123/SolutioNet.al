@@ -473,6 +473,7 @@ const ProblemDetails = () => {
       toast.error("Please login to add a solution");
       navigate("/auth");
       return;
+      
     }
     setIsAddSolutionOpen(true);
   };
@@ -557,12 +558,12 @@ const ProblemDetails = () => {
       <NavigationNew />
       
       <main className="pt-24 pb-16">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-8">
+        <div className="container mx-auto px-2">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2 space-y-4">
               <Card className="glass">
-                <CardBody className="p-6">
-                  <div className="mb-6">
+                <CardBody className="p-4">
+                  <div className="mb-2">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm text-muted-foreground">#{problem.pid}</span>
@@ -578,7 +579,7 @@ const ProblemDetails = () => {
                       </span>
                     </div>
                     
-                    <h1 className="text-3xl font-bold mb-4">{problem.title}</h1>
+                    <h1 className="text-3xl font-bold mb-2">{problem.title}</h1>
                     
                     {isAuthor && (
                       <Button color="danger" variant="light" onPress={handleDeleteProblem}>
@@ -592,21 +593,21 @@ const ProblemDetails = () => {
 
               <Card className="glass">
                 <CardBody className="p-6">
-                  <h2 className="text-xl font-semibold mb-4">Problem Statement</h2>
+                  <h2 className="text-xl font-semibold mb-2">Problem Statement</h2>
                   <p className="text-muted-foreground leading-relaxed">{problem.description}</p>
                 </CardBody>
               </Card>
 
               <Card className="glass">
                 <CardBody className="p-6">
-                  <h2 className="text-xl font-semibold mb-4">Abstract</h2>
+                  <h2 className="text-xl font-semibold mb-2">Abstract</h2>
                   <p className="text-muted-foreground leading-relaxed">{problem.abstract}</p>
                 </CardBody>
               </Card>
 
               <Card className="glass">
                 <CardBody className="p-6">
-                  <h2 className="text-xl font-semibold mb-4">Proposed Solution</h2>
+                  <h2 className="text-xl font-semibold mb-2">Proposed Solution</h2>
                   <p className="text-muted-foreground leading-relaxed">{problem.proposed_solution}</p>
                 </CardBody>
               </Card>
@@ -614,7 +615,7 @@ const ProblemDetails = () => {
               {solutions.length > 0 && (
                 <Card className="glass">
                   <CardBody className="p-6">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-2">
                       <h2 className="text-xl font-semibold">Other Solutions</h2>
                       <Button color="primary" size="sm" onPress={handleAddSolution} startContent={<Plus className="h-4 w-4" />}>
                         Add Solution
@@ -630,10 +631,10 @@ const ProblemDetails = () => {
                         </div>
                       </div>
                     ) : (
-                      <div className="space-y-4">
+                      <div className="space-y-2">
                         {isMockMode() && (
                           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
-                            Demo mode: set VITE_OPENAI_API_KEY for real AI summaries.
+                            Demo mode: deploy the ml-proxy Edge Function and set VITE_ENABLE_ML_FUNCTION=true.
                           </div>
                         )}
                         <Card className="bg-primary/5 border border-primary/20">
@@ -693,7 +694,7 @@ const ProblemDetails = () => {
                 <Card className="glass">
                   <CardBody className="p-6">
                     <h2 className="text-xl font-semibold mb-2">Other Solutions</h2>
-                    <p className="text-muted-foreground text-sm mb-4">No solutions yet. Be the first to add one.</p>
+                    <p className="text-muted-foreground text-sm mb-2">No solutions yet. Be the first to add one.</p>
                     <Button color="primary" onPress={handleAddSolution} startContent={<Plus className="h-4 w-4" />}>Add Solution</Button>
                   </CardBody>
                 </Card>
@@ -701,9 +702,9 @@ const ProblemDetails = () => {
 
               <Card className="glass">
                 <CardBody className="p-6">
-                  <h2 className="text-xl font-semibold mb-4">Comments</h2>
+                  <h2 className="text-xl font-semibold mb-2">Comments</h2>
                   
-                  <div className="flex gap-2 mb-6">
+                  <div className="flex gap-2 mb-2">
                     <Textarea
                       placeholder="Add a comment..."
                       value={comment}
@@ -719,7 +720,7 @@ const ProblemDetails = () => {
 
                   <Divider className="my-2" />
 
-                  <div className="space-y-4">
+                  <div className="space-y-2">
                     {comments.length > 0 ? (
                       (() => {
                         const roots = comments.filter((c: any) => !c.parent_id).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -813,7 +814,7 @@ const ProblemDetails = () => {
               </Card>
             </div>
 
-            <div className="lg:col-span-1 space-y-8">
+            <div className="lg:col-span-1 space-y-4">
               <Card className="glass">
                 <CardTitle className="text-lg text-muted-foreground pt-1 px-2 flex justify-center"> <u>Author Details</u></CardTitle>
                 <CardBody className="p-4">
@@ -892,9 +893,9 @@ const ProblemDetails = () => {
 
               {problem.external_links && problem.external_links.length > 0 && (
                 <Card className="glass">
-                  <CardBody className="p-6">
-                    <h3 className="font-semibold text-lg mb-4">External Links</h3>
-                    <div className="space-y-2">
+                  <CardBody className="p-4">
+                    <h3 className="font-semibold text-lg mb-2">External Links</h3>
+                    <div className="space-y-0">
                       {problem.external_links.map((link: any, index: number) => (
                         <a
                           key={index}
@@ -913,9 +914,9 @@ const ProblemDetails = () => {
 
               {problem.social_links && problem.social_links.length > 0 && (
                 <Card className="glass">
-                  <CardBody className="p-6">
-                    <h3 className="font-semibold text-lg mb-4">Share</h3>
-                    <div className="space-y-2">
+                  <CardBody className="p-4">
+                    <h3 className="font-semibold text-lg mb-2">Share</h3>
+                    <div className="space-y-0">
                       {problem.social_links.map((link: any, index: number) => (
                         <a
                           key={index}
@@ -933,10 +934,10 @@ const ProblemDetails = () => {
               )}
 
               <Card className="glass">
-                <CardBody className="p-6">
-                  <h3 className="font-semibold text-lg mb-4">Related problems</h3>
+                <CardBody className="p-4">
+                  <h3 className="font-semibold text-lg mb-2">Related problems</h3>
                   {relatedLoading ? (
-                    <div className="flex justify-center py-4">
+                    <div className="flex justify-center py-0">
                       <Spinner size="sm" />
                     </div>
                   ) : relatedProblems.length > 0 ? (

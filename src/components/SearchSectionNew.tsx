@@ -75,8 +75,9 @@ export const SearchSectionNew = ({
             <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-left">
               <div className="text-sm font-semibold text-warning">AI search is in demo mode</div>
               <div className="text-xs text-muted-foreground">
-                Set <span className="font-mono">VITE_OPENAI_API_KEY</span> to enable real embeddings. Until then,
-                semantic ranking may be unreliable.
+                Enable <span className="font-mono">VITE_ENABLE_ML_FUNCTION=true</span> after deploying the
+                <span className="font-mono"> ml-proxy </span>
+                Supabase Edge Function. Until then, semantic ranking may be unreliable.
               </div>
             </div>
           )}

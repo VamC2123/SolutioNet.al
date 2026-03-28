@@ -2,16 +2,34 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+
+// Prefer explicit URL, but safely fall back to project ID if needed
+const SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL ||
+  (PROJECT_ID ? `https://${PROJECT_ID}.supabase.co` : "");
+
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  // Surface clear diagnostics in the dev console without breaking the app
+  // so it's obvious when env wiring (not app logic) is the root cause.
+  console.error(
+    "[Supabase] Missing configuration – check VITE_SUPABASE_URL / VITE_SUPABASE_PROJECT_ID and VITE_SUPABASE_PUBLISHABLE_KEY in your .env."
+  );
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
+export const supabase = createClient<Database>(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      storage: localStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+    },
   }
-});
+);
