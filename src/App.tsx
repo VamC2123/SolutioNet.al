@@ -1,3 +1,5 @@
+import { Analytics } from "@vercel/analytics/react"
+import { SpeedInsights } from "@vercel/speed-insights/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ScrollToTop } from "@/components/ScrollToTop";
@@ -36,7 +38,10 @@ const App = () => (
           <Route path="/contribute" element={<Contribute />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
+          <Analytics />
         </Routes>
+        <Analytics />
+        <SpeedInsights />
         </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>

@@ -135,7 +135,7 @@ export const Footer = () => {
         </div>
 
         <div className="border-t border-border mt-2 pt-2 text-center text-sm text-muted-foreground">
-          <p>&copy; 2025 SolutioNet.al</p>
+          <p>&copy; 2026 SolutioNet.al</p>
         </div>
       </div>
     </footer>
