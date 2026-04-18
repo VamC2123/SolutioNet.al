@@ -1,14 +1,6 @@
-# Welcome to your Lovable project
-
-## Project info
-
-**URL**: https://lovable.dev/projects/43d3702b-4f96-4699-84aa-bd6b91c9c838
+# Project info
 
 ## How can I edit this code?
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/43d3702b-4f96-4699-84aa-bd6b91c9c838) and start prompting.
 
 **Use your preferred IDE**
 
@@ -60,6 +52,3 @@ To recreate the database elsewhere, run [`supabase/schema_full.sql`](supabase/sc
 
 **HTTP 429 on signup:** wait 15–60 minutes or add users manually in the Dashboard; see **Authentication → Rate Limits**.
 
-## Can I connect a custom domain?
-
-[Lovable custom domain docs](https://docs.lovable.dev/features/custom-domain#custom-domain)
